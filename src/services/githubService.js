@@ -42,21 +42,48 @@ Response format:
         const response = await result.response;
         const text = response.text();
         
-        // Strict JSON extraction
+        // Enhanced JSON extraction and cleaning
         const jsonMatch = text.match(/\{[\s\S]*\}/);  // Match everything between first { and last }
-        const cleanedText = jsonMatch ? jsonMatch[0].trim() : '{}';
+        let cleanedText = jsonMatch ? jsonMatch[0] : '{}';
+        
+        // Additional cleaning steps
+        cleanedText = cleanedText
+            .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+            .replace(/\\[^"bfnrtu\/]/g, '') // Remove invalid escapes
+            .replace(/(["[{,])(\s*)nan\s*([,}\]])/gi, '$1null$3') // Replace NaN with null
+            .replace(/(["[{,])(\s*)undefined\s*([,}\]])/g, '$1null$3') // Replace undefined with null
+            .replace(/,\s*([}\]])/g, '$1') // Remove trailing commas
+            .trim();
         
         let analysis;
         try {
             analysis = JSON.parse(cleanedText);
             
-            // Enforce strict schema
-            if (typeof analysis.description !== 'string') analysis.description = `Analysis of ${functionName}`;
-            if (typeof analysis.type !== 'string') analysis.type = 'Unknown';
-            if (!Array.isArray(analysis.parameterDescriptions)) analysis.parameterDescriptions = [];
-            if (typeof analysis.returnDescription !== 'string') analysis.returnDescription = 'Unknown return value';
+            // Enforce strict schema with type validation and sanitization
+            const sanitizedAnalysis = {
+                description: typeof analysis.description === 'string' ? analysis.description : `Analysis of ${functionName}`,
+                type: typeof analysis.type === 'string' ? analysis.type : 'Unknown',
+                parameterDescriptions: Array.isArray(analysis.parameterDescriptions) ? 
+                    analysis.parameterDescriptions.filter(desc => typeof desc === 'string') : [],
+                returnDescription: typeof analysis.returnDescription === 'string' ? 
+                    analysis.returnDescription : 'Unknown return value',
+                codePatterns: Array.isArray(analysis.codePatterns) ? 
+                    analysis.codePatterns.filter(pattern => typeof pattern === 'string') : [],
+                dependencies: {
+                    external: Array.isArray(analysis.dependencies?.external) ? 
+                        analysis.dependencies.external.filter(dep => typeof dep === 'string') : [],
+                    internal: Array.isArray(analysis.dependencies?.internal) ? 
+                        analysis.dependencies.internal.filter(dep => typeof dep === 'string') : []
+                },
+                securityConsiderations: typeof analysis.securityConsiderations === 'string' ? 
+                    analysis.securityConsiderations : '',
+                performanceConsiderations: typeof analysis.performanceConsiderations === 'string' ? 
+                    analysis.performanceConsiderations : '',
+                testingGuidelines: typeof analysis.testingGuidelines === 'string' ? 
+                    analysis.testingGuidelines : ''
+            };
             
-            return analysis;
+            return sanitizedAnalysis;
         } catch (parseError) {
             console.error('Error parsing Gemini response:', parseError);
             return {

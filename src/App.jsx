@@ -1,9 +1,58 @@
 import { useState } from 'react';
-import { Container, Box, Stack, CssBaseline, Paper } from '@mui/material';
+import { Container, Box, Stack, CssBaseline, Paper, ThemeProvider, createTheme } from '@mui/material';
 import RepositoryInput from './components/RepositoryInput';
 import FunctionAnalyzer from './components/FunctionAnalyzer';
 import FileTree from './components/FileTree';
 import { fetchRepositoryFiles, fetchFileContent, analyzeCodeWithGemini } from './services/githubService';
+
+// Create a custom theme for a luxurious look
+const theme = createTheme({
+  palette: {
+    mode: 'dark',
+    primary: {
+      main: '#B8860B', // Dark golden color
+    },
+    secondary: {
+      main: '#C0C0C0', // Silver color
+    },
+    background: {
+      default: '#1A1A1A',
+      paper: '#2D2D2D',
+    },
+  },
+  typography: {
+    fontFamily: '"Playfair Display", "Roboto", "Helvetica", "Arial", sans-serif',
+    h4: {
+      fontWeight: 600,
+      letterSpacing: '0.02em',
+    },
+    h6: {
+      fontWeight: 500,
+      letterSpacing: '0.01em',
+    },
+  },
+  components: {
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundImage: 'none',
+          transition: 'all 0.3s ease-in-out',
+          '&:hover': {
+            boxShadow: '0 8px 24px rgba(184, 134, 11, 0.15)',
+          },
+        },
+      },
+    },
+    MuiContainer: {
+      styleOverrides: {
+        root: {
+          paddingTop: '2rem',
+          paddingBottom: '2rem',
+        },
+      },
+    },
+  },
+});
 
 function App() {
   const [files, setFiles] = useState([]);
@@ -289,22 +338,39 @@ function App() {
   };
 
   return (
-    <>
+    <ThemeProvider theme={theme}>
       <CssBaseline />
       <Container maxWidth="xl" sx={{ py: 4 }}>
         <RepositoryInput onSubmit={handleRepositorySubmit} />
-        <Stack direction="row" spacing={3}>
+        <Stack direction="row" spacing={4} sx={{ mt: 4 }}>
           <Box flex={1} maxWidth={400}>
-            <Paper elevation={3} sx={{ p: 2, height: '70vh' }}>
+            <Paper
+              elevation={3}
+              sx={{
+                p: 3,
+                height: '75vh',
+                borderRadius: 2,
+                border: '1px solid rgba(184, 134, 11, 0.1)',
+              }}
+            >
               <FileTree files={files} onFileSelect={handleFileSelect} />
             </Paper>
           </Box>
           <Box flex={2}>
-            <FunctionAnalyzer functions={functions} />
+            <Paper
+              elevation={3}
+              sx={{
+                p: 3,
+                borderRadius: 2,
+                border: '1px solid rgba(184, 134, 11, 0.1)',
+              }}
+            >
+              <FunctionAnalyzer functions={functions} />
+            </Paper>
           </Box>
         </Stack>
       </Container>
-    </>
+    </ThemeProvider>
   );
 }
 
