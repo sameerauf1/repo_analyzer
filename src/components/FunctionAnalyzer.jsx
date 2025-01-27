@@ -126,6 +126,21 @@ const FunctionAnalyzer = ({ functions }) => {
                                                     Error Handling: {func.errorHandling}
                                                 </Typography>
                                             )}
+                                            {func.name.startsWith('use') && (
+                                                <Typography component="div" variant="body2" color="info.main" sx={{ mt: 1 }}>
+                                                    React Hook Documentation:
+                                                    <Typography component="div" variant="body2" sx={{ ml: 2 }}>
+                                                        {func.name === 'useEffect' && 'useEffect is a React Hook that lets you synchronize a component with an external system. It accepts a function that contains side-effect code and a dependency array that controls when the effect runs.'}
+                                                        {func.name === 'useState' && 'useState is a React Hook that lets you add state to functional components. It returns an array with two values: the current state and a function to update it.'}
+                                                        {func.name === 'useCallback' && 'useCallback is a React Hook that lets you cache a function definition between re-renders. It helps optimize performance by preventing unnecessary re-renders of child components.'}
+                                                        {func.name === 'useMemo' && 'useMemo is a React Hook that lets you cache the result of a calculation between re-renders. It helps optimize performance by avoiding expensive calculations on every render.'}
+                                                        {func.name === 'useContext' && 'useContext is a React Hook that lets you read and subscribe to context from your component. It provides a way to pass data through the component tree without passing props manually.'}
+                                                        {func.name === 'useRef' && (
+                                                            'useRef is a React Hook that lets you reference a value thats not needed for rendering. It returns a mutable ref object that persists for the full lifetime of the component and can be used to store any mutable value.'
+                                                        )}
+                                                    </Typography>
+                                                </Typography>
+                                            )}
                                             {func.dependencies && func.dependencies.length > 0 && (
                                                 <Box sx={{ mt: 1 }}>
                                                     <Typography component="div" variant="body2" color="text.primary">

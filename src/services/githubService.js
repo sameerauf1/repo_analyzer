@@ -36,6 +36,12 @@ async function analyzeCodeWithGemini(code, functionName, filePath) {
 - How does data flow through the function?
 - Are there any critical async operations?
 
+4. Language Features & Keywords:
+- Identify and explain any significant language keywords (e.g., async/await, export, class, extends)
+- For React components, explain hooks usage and their significance (e.g., useState, useEffect, useCallback)
+- Highlight any special syntax or patterns (e.g., destructuring, spread operator, arrow functions)
+- Document any TypeScript/Flow type annotations and their implications
+
 Analyze the following code and share your expert insights:
 
 ${code}
@@ -67,15 +73,46 @@ Provide a detailed analysis in this exact JSON format (no markdown):
         const response = await result.response;
         const text = response.text();
         
-        // Clean up the response text to ensure valid JSON
-        const cleanedText = text.replace(/```(json)?|```/g, '').trim();
+        // Enhanced cleaning of the response text to ensure valid JSON
+        let cleanedText = text
+            .replace(/```(json)?|```/g, '') // Remove code block markers
+            .replace(/\n\s*\n/g, '\n') // Remove empty lines
+            .replace(/[\t ]+/g, ' ') // Normalize whitespace
+            .replace(/""([^"]+)""/g, '"$1"') // Fix double quoted strings
+            .replace(/([{,])\s*"*([\w]+)"*\s*:/g, '$1"$2":') // Fix property names
+            .replace(/:\s*""([^"{}\[\]]+)""/g, ':"$1"') // Fix double quoted values
+            .replace(/:\s*([^"{}\[\],\s]+)([,}])/g, ':"$1"$2') // Quote unquoted values
+            .replace(/\n/g, ' ') // Replace newlines with spaces
+            .replace(/,\s*([}\]])/g, '$1') // Remove trailing commas
+            .replace(/"\s*"/g, '""') // Fix empty strings
+            .replace(/([{,])\s*"([^"]+)"\s*:/g, '$1"$2":') // Normalize property name quotes
+            .trim();
+
+        // Ensure the text starts and ends with curly braces
+        if (!cleanedText.startsWith('{')) {
+            const startIndex = cleanedText.indexOf('{');
+            if (startIndex !== -1) {
+                cleanedText = cleanedText.substring(startIndex);
+            }
+        }
+        if (!cleanedText.endsWith('}')) {
+            const endIndex = cleanedText.lastIndexOf('}');
+            if (endIndex !== -1) {
+                cleanedText = cleanedText.substring(0, endIndex + 1);
+            }
+        }
         
         let analysis;
         try {
             analysis = JSON.parse(cleanedText);
         } catch (parseError) {
             console.error('Error parsing Gemini response:', parseError, '\nResponse text:', cleanedText);
-            throw new Error('Failed to parse AI analysis response');
+            // Provide a fallback analysis object
+            return {
+                description: `Analysis of ${functionName} (parsing error: ${parseError.message})`,
+                parameterDescriptions: [],
+                returnDescription: 'Analysis failed due to parsing error'
+            };
         }
 
         // Validate analysis structure and provide defaults if needed
