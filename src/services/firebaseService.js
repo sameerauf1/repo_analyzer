@@ -1,6 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, collection } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -60,8 +60,8 @@ export const getCachedRepositoryData = async (owner, repo) => {
   }
 };
 
-// Cache file content and analysis with sanitized path
-export const cacheFileData = async (owner, repo, path, content, analysis) => {
+// Cache file content, analysis, and dependencies with sanitized path
+export const cacheFileData = async (owner, repo, path, content, analysis, dependencies = []) => {
   try {
     const sanitizedPath = `${owner}_${repo}_${path}`.replace(/[\/.]/g, '_');
     const fileRef = doc(db, 'files', sanitizedPath);
@@ -71,6 +71,7 @@ export const cacheFileData = async (owner, repo, path, content, analysis) => {
       path,
       content,
       analysis,
+      dependencies,
       lastUpdated: new Date().toISOString()
     }, { merge: true });
     return true;

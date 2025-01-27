@@ -181,15 +181,6 @@ function App() {
                 const functionBody = bodyStart >= 0 && bodyEnd >= 0 ?
                   matchStr.slice(bodyStart + 1, bodyEnd) : '';
 
-                // Get AI analysis for the function
-                const aiAnalysis = await analyzeCodeWithGemini(matchStr, name);
-
-                // Analyze function relationships and call patterns
-                const dependencies = imports.filter(imp => {
-                  const importName = imp.split('/').pop();
-                  return functionBody.includes(importName) || matchStr.includes(importName);
-                });
-
                 // Analyze function calls within the body
                 const functionCalls = [];
                 const callPattern = /\b([\w$]+)\s*\(/g;
@@ -201,10 +192,27 @@ function App() {
                   }
                 }
 
+                // Get AI analysis for the function
+                const aiAnalysis = await analyzeCodeWithGemini(matchStr, name, file.path);
+
+                // Analyze function relationships and call patterns
+                const dependencies = {
+                  imports: imports,
+                  internalCalls: functionCalls,
+                  externalCalls: aiAnalysis.dependencies?.externalCalls || []
+                };
+
                 return {
                   name,
                   type: aiAnalysis.type || type,
-                  description: aiAnalysis.description || `${type === 'class' ? 'Class' : isGetter ? 'Getter' : isSetter ? 'Setter' : 'Function'} found in ${file.path}`,
+                  description: aiAnalysis.description || `${type === 'class' ?
+                    `A class that ${parentClass ? `extends ${parentClass} and ` : ''}provides structured organization of related methods and properties` :
+                    isGetter ? `A getter method that provides controlled access to a property` :
+                      isSetter ? `A setter method that provides controlled modification of a property` :
+                        isAsync ? `An asynchronous function that handles non-blocking operations` :
+                          isArrow ? `An arrow function that ${args ? `takes ${args} as input and` : ''} provides functional programming style implementation` :
+                            `A standard function that ${args ? `accepts ${args} as parameters and` : ''} encapsulates reusable logic`
+                    } in ${file.path}`,
                   arguments: aiAnalysis.parameterDescriptions || args.split(',').map(arg => arg.trim()).filter(arg => arg),
                   isAsync,
                   isExported,

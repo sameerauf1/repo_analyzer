@@ -10,7 +10,7 @@ const octokit = new Octokit();
 const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
 
 // Helper function to analyze code using Gemini
-async function analyzeCodeWithGemini(code, functionName) {
+async function analyzeCodeWithGemini(code, functionName, filePath) {
     try {
         // Skip analysis for empty code
         if (!code || !functionName) {
@@ -19,7 +19,49 @@ async function analyzeCodeWithGemini(code, functionName) {
 
         const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
         
-        const prompt = `Analyze this JavaScript/TypeScript function or class named '${functionName}':\n\n${code}\n\nProvide a detailed analysis in this exact JSON format (no markdown):\n{\n  "description": "Comprehensive description of the function's purpose and behavior",\n  "type": "Type of the function (e.g., API endpoint, database operation, utility function)",\n  "parameterDescriptions": [{"name": "paramName", "description": "detailed parameter description", "type": "parameter type if specified"}],\n  "returnDescription": "What the function returns, including possible return types and conditions",\n  "securityConsiderations": "Any security measures implemented (e.g., authentication, input validation)",\n  "asyncBehavior": "Description of asynchronous operations if present",\n  "dependencies": "External services or libraries used",\n  "errorHandling": "How errors are handled and logged"\n}`;
+        const prompt = `As an experienced software engineer analyzing this code, provide insights about the ${functionName} in ${filePath}. Consider:
+
+1. Code Purpose & Implementation:
+- What's the core functionality and architectural role?
+- How does it handle edge cases and errors?
+- Are there any potential performance considerations?
+
+2. Code Quality & Best Practices:
+- How well does it follow SOLID principles?
+- What design patterns are implemented?
+- Is the code maintainable and testable?
+
+3. Technical Dependencies & Flow:
+- What external services or modules does it rely on?
+- How does data flow through the function?
+- Are there any critical async operations?
+
+Analyze the following code and share your expert insights:
+
+${code}
+
+Provide a detailed analysis in this exact JSON format (no markdown):
+{
+  "description": "A comprehensive explanation of the function's purpose, implementation approach, and architectural significance",
+  "type": "Architectural classification (e.g., Controller, Service, Utility, Hook, HOC)",
+  "parameterDescriptions": [{
+    "name": "paramName",
+    "description": "Parameter's role and impact on function behavior",
+    "type": "Expected data type and structure",
+    "validation": "Any validation or constraints"
+  }],
+  "returnDescription": "Detailed explanation of return value, including type guarantees and possible states",
+  "securityConsiderations": "Security implications, input validation, and protective measures",
+  "asyncBehavior": "Async flow, error boundaries, and state management",
+  "dependencies": {
+    "imports": ["Required modules and their purpose"],
+    "internalCalls": ["Internal function calls and their significance"],
+    "externalCalls": ["External service calls and their impact"]
+  },
+  "errorHandling": "Error management strategy and recovery mechanisms",
+  "performanceConsiderations": "Runtime complexity and optimization opportunities",
+  "maintainabilityNotes": "Code organization and potential refactoring suggestions"
+}`;
         
         const result = await model.generateContent(prompt);
         const response = await result.response;
@@ -132,7 +174,7 @@ export const fetchFileContent = async (owner, repo, path) => {
             };
 
             // Cache the file content
-            await cacheFileData(owner, repo, path, content, null);
+            await cacheFileData(owner, repo, path, content, null, []);
             return fileData;
         } catch (decodeError) {
             console.error('Base64 decoding error:', decodeError);
