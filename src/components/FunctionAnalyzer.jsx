@@ -24,7 +24,7 @@ const FunctionAnalyzer = ({ functions }) => {
                     const functionKey = `${func.name}-${func.type}-${index}`;
                     return (
                         <div key={functionKey}>
-                            <ListItem>
+                            <ListItem sx={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                                 <ListItemText
                                     primary={
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
@@ -80,12 +80,19 @@ const FunctionAnalyzer = ({ functions }) => {
                                     secondary={
                                         <Box sx={{ mt: 1 }}>
                                             <Typography component="div" variant="body2" color="text.primary">
-                                                Type: {func.type}
+                                                Type: {func.type === 'class' ? 'Class' : func.type}
                                             </Typography>
-                                            {func.type === 'class' && func.parentClass && (
-                                                <Typography component="div" variant="body2">
-                                                    Extends: {func.parentClass}
-                                                </Typography>
+                                            {func.type === 'class' && (
+                                                <Box sx={{ ml: 2 }}>
+                                                    {func.parentClass && (
+                                                        <Typography component="div" variant="body2">
+                                                            Extends: {func.parentClass}
+                                                        </Typography>
+                                                    )}
+                                                    <Typography component="div" variant="body2">
+                                                        Constructor Parameters: {func.arguments.join(', ') || 'None'}
+                                                    </Typography>
+                                                </Box>
                                             )}
                                             <Typography component="div" variant="body2">
                                                 Arguments: {func.arguments.join(', ') || 'None'}

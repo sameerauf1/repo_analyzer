@@ -137,11 +137,23 @@ function App() {
                 let parentClass = '';
 
                 if (isClass) {
-                  const classMatch = matchStr.match(/class\s+([\w$]+)(?:\s+extends\s+([\w$.]+))?/);
+                  const classMatch = matchStr.match(/class\s+([\w$]+)(?:\s+extends\s+([\w$.]+))?(?:\s+implements\s+([\w$.,\s]+))?/);
                   if (classMatch) {
                     name = classMatch[1];
                     parentClass = classMatch[2] || '';
+                    const interfaces = classMatch[3] ? classMatch[3].split(',').map(i => i.trim()) : [];
                     type = 'class';
+
+                    // Extract class methods and properties
+                    const methodMatches = matchStr.match(/(?:public|private|protected)?\s*(?:static)?\s*(?:async\s+)?[\w$]+\s*\([^)]*\)\s*{/g) || [];
+                    const propertyMatches = matchStr.match(/(?:public|private|protected)?\s*(?:static)?\s*(?:readonly)?\s*[\w$]+\s*[=;]/g) || [];
+
+                    args = methodMatches.map(m => {
+                      const visibility = m.match(/public|private|protected/)?.[0] || 'public';
+                      const isStatic = m.includes('static');
+                      const methodName = m.match(/[\w$]+(?=\s*\()/)[0];
+                      return `${visibility}${isStatic ? ' static' : ''} ${methodName}`;
+                    });
                   }
                 } else {
                   // Try different patterns to extract function name
