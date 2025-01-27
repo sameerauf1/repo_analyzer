@@ -19,9 +19,13 @@ async function analyzeCodeWithGemini(code, functionName, filePath) {
 
         const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
         
-        const prompt = `Analyze this code and provide a detailed JSON response with exactly these fields and nothing else:${code}
+        const prompt = `Analyze this code and provide a detailed JSON response. Consider the following aspects:
 
-Response format:
+1. Context: This code is from file '${filePath}'
+2. Code to analyze:
+${code}
+
+Provide a comprehensive analysis in this exact JSON format:
 {
   "description": "Detailed explanation of what the function does, its role in the codebase, and any notable patterns or practices it implements",
   "type": "One word: Component/Utility/Service/Hook/Controller",
@@ -34,9 +38,22 @@ Response format:
   },
   "securityConsiderations": "Any security implications or best practices to consider",
   "performanceConsiderations": "Performance implications and optimization opportunities",
-  "testingGuidelines": "Suggestions for testing this function effectively"
+  "testingGuidelines": "Suggestions for testing this function effectively",
+  "complexity": {
+    "cognitive": "Assessment of cognitive complexity",
+    "cyclomaticComplexity": "Assessment of cyclomatic complexity"
+  },
+  "maintainability": "Assessment of code maintainability and suggestions for improvement",
+  "bestPractices": ["List of followed or violated best practices"],
+  "suggestedImprovements": ["Concrete suggestions for code improvements"]
 }
-`;
+
+IMPORTANT: 
+1. Ensure all string values are properly escaped
+2. Provide specific, actionable insights
+3. Consider the broader codebase context
+4. Focus on practical, implementable suggestions`;
+
         
         const result = await model.generateContent(prompt);
         const response = await result.response;
@@ -46,18 +63,37 @@ Response format:
         const jsonMatch = text.match(/\{[\s\S]*\}/);  // Match everything between first { and last }
         let cleanedText = jsonMatch ? jsonMatch[0] : '{}';
         
-        // Additional cleaning steps
+        // Log the raw and cleaned text for debugging
+        console.log('Raw Gemini response:', text);
+        console.log('Cleaned text before parsing:', cleanedText);
+        
+        // Enhanced cleaning and validation steps
         cleanedText = cleanedText
             .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+            .replace(/\*\*/g, '') // Remove markdown bold syntax
+            .replace(/`/g, '') // Remove backticks
             .replace(/\\[^"bfnrtu\/]/g, '') // Remove invalid escapes
             .replace(/(["[{,])(\s*)nan\s*([,}\]])/gi, '$1null$3') // Replace NaN with null
             .replace(/(["[{,])(\s*)undefined\s*([,}\]])/g, '$1null$3') // Replace undefined with null
+            .replace(/(["[{,])(\s*)null\s*([,}\]])/gi, '$1null$3') // Normalize null values
+            .replace(/(["[{,])(\s*)true\s*([,}\]])/gi, '$1true$3') // Normalize boolean values
+            .replace(/(["[{,])(\s*)false\s*([,}\]])/g, '$1false$3')
             .replace(/,\s*([}\]])/g, '$1') // Remove trailing commas
+            .replace(/\r?\n/g, '\\n') // Properly escape newlines
+            .replace(/"/g, '\"') // Properly escape quotes
             .trim();
+
+        // Validate JSON structure
+        if (!cleanedText.startsWith('{') || !cleanedText.endsWith('}')) {
+            throw new Error('Invalid JSON structure');
+        }
         
         let analysis;
         try {
-            analysis = JSON.parse(cleanedText);
+            // Wrap the cleaned text in a new object to ensure valid JSON
+            const wrappedText = `{"data":${cleanedText}}`;
+            const parsedData = JSON.parse(wrappedText);
+            analysis = parsedData.data;
             
             // Enforce strict schema with type validation and sanitization
             const sanitizedAnalysis = {
@@ -80,7 +116,19 @@ Response format:
                 performanceConsiderations: typeof analysis.performanceConsiderations === 'string' ? 
                     analysis.performanceConsiderations : '',
                 testingGuidelines: typeof analysis.testingGuidelines === 'string' ? 
-                    analysis.testingGuidelines : ''
+                    analysis.testingGuidelines : '',
+                complexity: {
+                    cognitive: typeof analysis.complexity?.cognitive === 'string' ? 
+                        analysis.complexity.cognitive : 'Not assessed',
+                    cyclomaticComplexity: typeof analysis.complexity?.cyclomaticComplexity === 'string' ? 
+                        analysis.complexity.cyclomaticComplexity : 'Not assessed'
+                },
+                maintainability: typeof analysis.maintainability === 'string' ? 
+                    analysis.maintainability : 'Not assessed',
+                bestPractices: Array.isArray(analysis.bestPractices) ? 
+                    analysis.bestPractices.filter(practice => typeof practice === 'string') : [],
+                suggestedImprovements: Array.isArray(analysis.suggestedImprovements) ? 
+                    analysis.suggestedImprovements.filter(suggestion => typeof suggestion === 'string') : []
             };
             
             return sanitizedAnalysis;
@@ -120,12 +168,55 @@ export const fetchRepositoryFiles = async (owner, repo) => {
         }
 
         console.log('Fetching fresh repository data');
-        const { data: tree } = await octokit.git.getTree({
-            owner,
-            repo,
-            tree_sha: 'main',
-            recursive: true
-        });
+        
+        // First, try to get the default branch name
+        let defaultBranch;
+        try {
+            const { data: repoData } = await octokit.repos.get({
+                owner,
+                repo
+            });
+            defaultBranch = repoData.default_branch;
+            console.log(`Using repository's default branch: ${defaultBranch}`);
+        } catch (branchError) {
+            console.warn('Could not fetch default branch:', branchError);
+            defaultBranch = null;
+        }
+
+        // Array of branch names to try
+        const branchesToTry = [
+            defaultBranch,
+            'main',
+            'master',
+            'development',
+            'dev'
+        ].filter(Boolean); // Remove null/undefined values
+
+        let tree;
+        let usedBranch;
+
+        // Try each branch name until one works
+        for (const branch of branchesToTry) {
+            try {
+                const response = await octokit.git.getTree({
+                    owner,
+                    repo,
+                    tree_sha: branch,
+                    recursive: true
+                });
+                tree = response.data;
+                usedBranch = branch;
+                console.log(`Successfully fetched tree using branch: ${branch}`);
+                break;
+            } catch (treeError) {
+                console.warn(`Failed to fetch tree using branch ${branch}:`, treeError);
+                continue;
+            }
+        }
+
+        if (!tree) {
+            throw new Error('Could not fetch repository tree from any known branch');
+        }
 
         const mappedData = tree.tree.map(item => ({
             name: item.path.split('/').pop(),

@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { Container, Box, Stack, CssBaseline, Paper, ThemeProvider, createTheme } from '@mui/material';
+import * as parser from '@babel/parser';
+import { default as traverse } from '@babel/traverse';
+import * as t from '@babel/types';
 import RepositoryInput from './components/RepositoryInput';
 import FunctionAnalyzer from './components/FunctionAnalyzer';
 import FileTree from './components/FileTree';
@@ -137,161 +140,115 @@ function App() {
         if (isJsFile) {
           console.log(`Analyzing functions in ${file.path}`);
           try {
-            // Extract imports to track dependencies
-            const importMatches = fileData.content.match(/import\s+(?:{[^}]+}|[^;]+)\s+from\s+['"]([^'"]+)['"];?/g) || [];
-            const imports = importMatches.map(match => {
-              const [, path] = match.match(/from\s+['"]([^'"]+)['"]/);
-              return path;
+            // Parse code using Babel
+            const ast = parser.parse(fileData.content, {
+              sourceType: 'module',
+              plugins: ['jsx', 'typescript', 'classProperties', 'decorators-legacy']
             });
 
-            // Enhanced regex patterns to capture different function declarations and React components
-            const functionRegexes = [
-              // React functional components
-              /(?:export\s+)?(?:const|let|var)\s+([\w$]+)\s*=\s*(?:React\.)?(?:memo\s*)?\(?(\(?props\)?|\{[^}]*\})?\s*=>\s*{?/g,
-              // Named function declarations and async functions
-              /(?:export\s+)?(?:async\s+)?function\s+([\w$]+)\s*\(([^)]*)\)/g,
-              // Class declarations with optional extends
-              /(?:export\s+)?class\s+([\w$]+)(?:\s+extends\s+(?:React\.)?Component|PureComponent|[\w$.]+)?/g,
-              // Arrow functions and function expressions assigned to variables
-              /(?:export\s+)?(?:const|let|var)\s+([\w$]+)\s*=\s*(?:async\s*)?(?:function\s*\(([^)]*)\)|\(([^)]*)\)\s*=>)/g,
-              // Object method definitions including React lifecycle methods
-              /(?:async\s+)?(?:componentDidMount|componentDidUpdate|componentWillUnmount|render|[\w$]+)\s*\(([^)]*)\)\s*{/g,
-              // Getter/setter methods
-              /(?:get|set)\s+([\w$]+)\s*\(([^)]*)\)\s*{/g,
-              // useEffect and other hooks
-              /(?:const|let|var)\s+([\w$]+)\s*=\s*use[A-Z][\w$]*\(/g
-            ];
-
-            const functionMatches = [];
-            functionRegexes.forEach(regex => {
-              const matches = [...fileData.content.matchAll(regex)] || [];
-              functionMatches.push(...matches);
-            });
-
-            console.log(`Found ${functionMatches.length} functions/classes`);
-
-            const analyzedFunctions = await Promise.all(functionMatches.map(async match => {
-              try {
-                const matchStr = match[0] || '';
-                const isClass = matchStr.includes('class');
-                const isAsync = matchStr.includes('async');
-                const isExported = matchStr.includes('export');
-                const isArrow = matchStr.includes('=>');
-                const isGetter = matchStr.startsWith('get');
-                const isSetter = matchStr.startsWith('set');
-
-                let name = '';
-                let args = '';
-                let type = 'function';
-                let parentClass = '';
-
-                if (isClass) {
-                  const classMatch = matchStr.match(/class\s+([\w$]+)(?:\s+extends\s+([\w$.]+))?(?:\s+implements\s+([\w$.,\s]+))?/);
-                  if (classMatch) {
-                    name = classMatch[1];
-                    parentClass = classMatch[2] || '';
-                    const interfaces = classMatch[3] ? classMatch[3].split(',').map(i => i.trim()) : [];
-                    type = 'class';
-
-                    // Extract class methods and properties
-                    const methodMatches = matchStr.match(/(?:public|private|protected)?\s*(?:static)?\s*(?:async\s+)?[\w$]+\s*\([^)]*\)\s*{/g) || [];
-                    const propertyMatches = matchStr.match(/(?:public|private|protected)?\s*(?:static)?\s*(?:readonly)?\s*[\w$]+\s*[=;]/g) || [];
-
-                    args = methodMatches.map(m => {
-                      const visibility = m.match(/public|private|protected/)?.[0] || 'public';
-                      const isStatic = m.includes('static');
-                      const methodName = m.match(/[\w$]+(?=\s*\()/)[0];
-                      return `${visibility}${isStatic ? ' static' : ''} ${methodName}`;
-                    });
-                  }
-                } else {
-                  // Try different patterns to extract function name
-                  const patterns = [
-                    /(?:function\s+|(?:const|let|var)\s+)([\w$]+)/, // Regular function or variable declaration
-                    /([\w$]+)\s*=/, // Assignment
-                    /(?:get|set)\s+([\w$]+)/, // Getter/setter
-                    /([\w$]+)\s*\(/ // Method definition
-                  ];
-
-                  for (const pattern of patterns) {
-                    const nameMatch = matchStr.match(pattern);
-                    if (nameMatch && nameMatch[1]) {
-                      name = nameMatch[1];
-                      break;
-                    }
-                  }
-
-                  args = matchStr.match(/\(([^)]*)\)/)?.[1] || '';
+            const analyzedFunctions = [];
+            traverse(ast, {
+              FunctionDeclaration(path) {
+                analyzedFunctions.push(extractFunctionInfo(path, fileData.path));
+              },
+              ArrowFunctionExpression(path) {
+                if (path.parent.type === 'VariableDeclarator') {
+                  analyzedFunctions.push(extractFunctionInfo(path, fileData.path));
                 }
-
-                // Extract function body to analyze dependencies and return type
-                const bodyStart = matchStr.indexOf('{');
-                const bodyEnd = matchStr.lastIndexOf('}');
-                const functionBody = bodyStart >= 0 && bodyEnd >= 0 ?
-                  matchStr.slice(bodyStart + 1, bodyEnd) : '';
-
-                // Analyze function calls within the body
-                const functionCalls = [];
-                const callPattern = /\b([\w$]+)\s*\(/g;
-                let callMatch;
-                while ((callMatch = callPattern.exec(functionBody)) !== null) {
-                  const calledFunction = callMatch[1];
-                  if (calledFunction !== name) { // Avoid self-references
-                    functionCalls.push(calledFunction);
-                  }
+              },
+              ClassDeclaration(path) {
+                analyzedFunctions.push(extractClassInfo(path, fileData.path));
+              },
+              ClassMethod(path) {
+                if (!path.node.computed && !path.node.static) {
+                  analyzedFunctions.push(extractMethodInfo(path, fileData.path));
                 }
-
-                // Get AI analysis for the function
-                const aiAnalysis = await analyzeCodeWithGemini(matchStr, name, file.path);
-
-                // Analyze function relationships and call patterns
-                const dependencies = {
-                  imports: imports,
-                  internalCalls: functionCalls,
-                  externalCalls: aiAnalysis.dependencies?.externalCalls || []
-                };
-
-                return {
-                  name,
-                  type: aiAnalysis.type || type,
-                  description: aiAnalysis.description || `${type === 'class' ?
-                    `A class that ${parentClass ? `extends ${parentClass} and ` : ''}provides structured organization of related methods and properties` :
-                    isGetter ? `A getter method that provides controlled access to a property` :
-                      isSetter ? `A setter method that provides controlled modification of a property` :
-                        isAsync ? `An asynchronous function that handles non-blocking operations` :
-                          isArrow ? `An arrow function that ${args ? `takes ${args} as input and` : ''} provides functional programming style implementation` :
-                            `A standard function that ${args ? `accepts ${args} as parameters and` : ''} encapsulates reusable logic`
-                    } in ${file.path}`,
-                  arguments: aiAnalysis.parameterDescriptions || args.split(',').map(arg => arg.trim()).filter(arg => arg),
-                  isAsync,
-                  isExported,
-                  isArrow: type === 'function' ? isArrow : undefined,
-                  isGetter: type === 'function' ? isGetter : undefined,
-                  isSetter: type === 'function' ? isSetter : undefined,
-                  parentClass: type === 'class' ? parentClass : undefined,
-                  returnValue: aiAnalysis.returnDescription || 'Unknown',
-                  securityConsiderations: aiAnalysis.securityConsiderations,
-                  asyncBehavior: aiAnalysis.asyncBehavior,
-                  errorHandling: aiAnalysis.errorHandling,
-                  dependencies,
-                  filePath: file.path
-                };
-              } catch (error) {
-                console.error('Error analyzing function:', error);
-                return {
-                  name: 'Error',
-                  type: 'error',
-                  description: `Error analyzing function: ${error.message}`,
-                  arguments: [],
-                  isAsync: false,
-                  isExported: false,
-                  returnValue: 'Analysis failed',
-                  dependencies: [],
-                  filePath: file.path
-                };
               }
-            }));
-            setFunctions(analyzedFunctions);
+            });
+
+            // Helper function to extract function information
+            function extractFunctionInfo(path, filePath) {
+              const node = path.node;
+              const name = node.id?.name || path.parent.id?.name || 'Anonymous';
+              const isExported = path.findParent(p => p.isExportDeclaration()) !== null;
+              const isAsync = node.async;
+              const params = node.params.map(param => {
+                if (t.isIdentifier(param)) return param.name;
+                if (t.isObjectPattern(param)) return '{' + param.properties.map(p => p.key.name).join(', ') + '}';
+                if (t.isArrayPattern(param)) return '[' + param.elements.map(e => e?.name || '_').join(', ') + ']';
+                return 'param';
+              });
+
+              return {
+                name,
+                type: 'function',
+                isExported,
+                isAsync,
+                arguments: params,
+                filePath
+              };
+            }
+
+            // Helper function to extract class information
+            function extractClassInfo(path, filePath) {
+              const node = path.node;
+              const name = node.id.name;
+              const isExported = path.findParent(p => p.isExportDeclaration()) !== null;
+              const superClass = node.superClass?.name;
+
+              return {
+                name,
+                type: 'class',
+                isExported,
+                arguments: [],
+                parentClass: superClass,
+                filePath
+              };
+            }
+
+            // Helper function to extract method information
+            function extractMethodInfo(path, filePath) {
+              const node = path.node;
+              const name = node.key.name;
+              const isAsync = node.async;
+              const params = node.params.map(param => {
+                if (t.isIdentifier(param)) return param.name;
+                if (t.isObjectPattern(param)) return '{' + param.properties.map(p => p.key.name).join(', ') + '}';
+                return 'param';
+              });
+
+              return {
+                name,
+                type: 'method',
+                isAsync,
+                arguments: params,
+                filePath
+              };
+            }
+
+            // Analyze each function with Gemini
+            const analyzedWithAI = await Promise.all(
+              analyzedFunctions.map(async func => {
+                const aiAnalysis = await analyzeCodeWithGemini(
+                  fileData.content.substring(
+                    func.start,
+                    func.end
+                  ),
+                  func.name,
+                  func.filePath
+                );
+
+                return {
+                  ...func,
+                  description: aiAnalysis.description,
+                  returnValue: aiAnalysis.returnDescription,
+                  securityConsiderations: aiAnalysis.securityConsiderations,
+                  dependencies: aiAnalysis.dependencies || { imports: [], internalCalls: [], externalCalls: [] }
+                };
+              })
+            );
+
+            setFunctions(analyzedWithAI);
           } catch (analysisError) {
             console.error('Error during code analysis:', analysisError);
             setFunctions([{
