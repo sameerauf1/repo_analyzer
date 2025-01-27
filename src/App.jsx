@@ -184,10 +184,22 @@ function App() {
                 // Get AI analysis for the function
                 const aiAnalysis = await analyzeCodeWithGemini(matchStr, name);
 
+                // Analyze function relationships and call patterns
                 const dependencies = imports.filter(imp => {
                   const importName = imp.split('/').pop();
                   return functionBody.includes(importName) || matchStr.includes(importName);
                 });
+
+                // Analyze function calls within the body
+                const functionCalls = [];
+                const callPattern = /\b([\w$]+)\s*\(/g;
+                let callMatch;
+                while ((callMatch = callPattern.exec(functionBody)) !== null) {
+                  const calledFunction = callMatch[1];
+                  if (calledFunction !== name) { // Avoid self-references
+                    functionCalls.push(calledFunction);
+                  }
+                }
 
                 return {
                   name,

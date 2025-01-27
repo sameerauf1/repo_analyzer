@@ -1,5 +1,6 @@
 import { Octokit } from '@octokit/rest';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { cacheRepositoryData, getCachedRepositoryData, cacheFileData, getCachedFileData } from './firebaseService';
 
 // Initialize Octokit without authentication for public access
 const octokit = new Octokit();
@@ -53,6 +54,14 @@ async function analyzeCodeWithGemini(code, functionName) {
 
 export const fetchRepositoryFiles = async (owner, repo) => {
     try {
+        // Check cache first
+        const cachedData = await getCachedRepositoryData(owner, repo);
+        if (cachedData && cachedData.data) {
+            console.log('Using cached repository data');
+            return cachedData.data;
+        }
+
+        console.log('Fetching fresh repository data');
         const { data: tree } = await octokit.git.getTree({
             owner,
             repo,
@@ -60,12 +69,16 @@ export const fetchRepositoryFiles = async (owner, repo) => {
             recursive: true
         });
 
-        return tree.tree.map(item => ({
+        const mappedData = tree.tree.map(item => ({
             name: item.path.split('/').pop(),
             path: item.path,
             type: item.type,
             children: []
         }));
+
+        // Cache the results
+        await cacheRepositoryData(owner, repo, mappedData);
+        return mappedData;
     } catch (error) {
         console.error('Error fetching repository files:', error);
         throw error;
@@ -74,6 +87,19 @@ export const fetchRepositoryFiles = async (owner, repo) => {
 
 export const fetchFileContent = async (owner, repo, path) => {
     try {
+        // Check cache first
+        const cachedFile = await getCachedFileData(owner, repo, path);
+        if (cachedFile && cachedFile.content) {
+            console.log('Using cached file data');
+            return {
+                name: path.split('/').pop(),
+                content: cachedFile.content,
+                path,
+                sha: cachedFile.sha
+            };
+        }
+
+        console.log('Fetching fresh file content');
         const { data } = await octokit.repos.getContent({
             owner,
             repo,
@@ -97,13 +123,17 @@ export const fetchFileContent = async (owner, repo, path) => {
                 throw new Error('Decoded content is empty');
             }
 
-            return {
+            const fileData = {
                 name: path.split('/').pop(),
                 content,
                 path,
                 size: data.size,
                 sha: data.sha
             };
+
+            // Cache the file content
+            await cacheFileData(owner, repo, path, content, null);
+            return fileData;
         } catch (decodeError) {
             console.error('Base64 decoding error:', decodeError);
             throw new Error(`Failed to decode file content: ${decodeError.message}. Content might be corrupted or not properly base64 encoded.`);

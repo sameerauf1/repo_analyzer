@@ -1,4 +1,4 @@
-import { Paper, Typography, List, ListItem, ListItemText, Divider, Chip, Box } from '@mui/material';
+import { Paper, Typography, List, ListItem, ListItemText, Divider, Chip, Box, Alert } from '@mui/material';
 
 const FunctionAnalyzer = ({ functions }) => {
     if (!functions || functions.length === 0) {
@@ -100,9 +100,20 @@ const FunctionAnalyzer = ({ functions }) => {
                                             <Typography component="div" variant="body2">
                                                 Return: {func.returnValue || 'None'}
                                             </Typography>
+                                            {func.description && (
+                                                <Typography component="div" variant="body2" color="text.primary" sx={{ mt: 1 }}>
+                                                    Function Purpose:
+                                                    <Typography component="div" variant="body2" sx={{ ml: 2 }}>
+                                                        {func.description}
+                                                    </Typography>
+                                                </Typography>
+                                            )}
                                             {func.securityConsiderations && (
-                                                <Typography component="div" variant="body2">
-                                                    Security: {func.securityConsiderations}
+                                                <Typography component="div" variant="body2" color="warning.main">
+                                                    Security Considerations:
+                                                    <Typography component="div" variant="body2" sx={{ ml: 2 }}>
+                                                        {func.securityConsiderations}
+                                                    </Typography>
                                                 </Typography>
                                             )}
                                             {func.asyncBehavior && (
