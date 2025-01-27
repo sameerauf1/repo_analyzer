@@ -19,6 +19,11 @@ const FunctionAnalyzer = ({ functions }) => {
             <Typography variant="h6" gutterBottom>
                 Function Analysis
             </Typography>
+            {functions[0] && functions[0].filePath && (
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                    Direct File Path: {functions[0].filePath}
+                </Typography>
+            )}
             <List>
                 {functions.map((func, index) => {
                     const functionKey = `${func.name}-${func.type}-${index}`;

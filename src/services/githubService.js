@@ -19,99 +19,51 @@ async function analyzeCodeWithGemini(code, functionName, filePath) {
 
         const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
         
-        const prompt = `As an experienced software engineer analyzing this code, provide insights about the ${functionName} in ${filePath}. Consider:
+        const prompt = `Analyze this code and provide a detailed JSON response with exactly these fields and nothing else:${code}
 
-1. Code Purpose & Implementation:
-- What's the core functionality and architectural role?
-- How does it handle edge cases and errors?
-- Are there any potential performance considerations?
-
-2. Code Quality & Best Practices:
-- How well does it follow SOLID principles?
-- What design patterns are implemented?
-- Is the code maintainable and testable?
-
-3. Technical Dependencies & Flow:
-- What external services or modules does it rely on?
-- How does data flow through the function?
-- Are there any critical async operations?
-
-4. Language Features & Keywords:
-- Identify and explain any significant language keywords (e.g., async/await, export, class, extends)
-- For React components, explain hooks usage and their significance (e.g., useState, useEffect, useCallback)
-- Highlight any special syntax or patterns (e.g., destructuring, spread operator, arrow functions)
-- Document any TypeScript/Flow type annotations and their implications
-
-Analyze the following code and share your expert insights:
-
-${code}
-
-Provide a detailed analysis in this exact JSON format (no markdown):
+Response format:
 {
-  "description": "A comprehensive explanation of the function's purpose, implementation approach, and architectural significance",
-  "type": "Architectural classification (e.g., Controller, Service, Utility, Hook, HOC)",
-  "parameterDescriptions": [{
-    "name": "paramName",
-    "description": "Parameter's role and impact on function behavior",
-    "type": "Expected data type and structure",
-    "validation": "Any validation or constraints"
-  }],
-  "returnDescription": "Detailed explanation of return value, including type guarantees and possible states",
-  "securityConsiderations": "Security implications, input validation, and protective measures",
-  "asyncBehavior": "Async flow, error boundaries, and state management",
+  "description": "Detailed explanation of what the function does, its role in the codebase, and any notable patterns or practices it implements",
+  "type": "One word: Component/Utility/Service/Hook/Controller",
+  "parameterDescriptions": ["Detailed description of each parameter, its purpose, and expected values"],
+  "returnDescription": "Comprehensive description of the return value, its structure, and usage",
+  "codePatterns": ["List of design patterns, architectural patterns, or coding practices used"],
   "dependencies": {
-    "imports": ["Required modules and their purpose"],
-    "internalCalls": ["Internal function calls and their significance"],
-    "externalCalls": ["External service calls and their impact"]
+    "external": ["External dependencies and their purpose"],
+    "internal": ["Internal function calls and their relationships"]
   },
-  "errorHandling": "Error management strategy and recovery mechanisms",
-  "performanceConsiderations": "Runtime complexity and optimization opportunities",
-  "maintainabilityNotes": "Code organization and potential refactoring suggestions"
-}`;
+  "securityConsiderations": "Any security implications or best practices to consider",
+  "performanceConsiderations": "Performance implications and optimization opportunities",
+  "testingGuidelines": "Suggestions for testing this function effectively"
+}
+`;
         
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
         
-        // Enhanced cleaning of the response text to ensure valid JSON
-        let cleanedText = text
-            .replace(/```(json)?|```/g, '') // Remove code block markers
-            .replace(/\n\s*\n/g, '\n') // Remove empty lines
-            .replace(/[\t ]+/g, ' ') // Normalize whitespace
-            .replace(/""([^"]+)""/g, '"$1"') // Fix double quoted strings
-            .replace(/([{,])\s*"*([\w]+)"*\s*:/g, '$1"$2":') // Fix property names
-            .replace(/:\s*""([^"{}\[\]]+)""/g, ':"$1"') // Fix double quoted values
-            .replace(/:\s*([^"{}\[\],\s]+)([,}])/g, ':"$1"$2') // Quote unquoted values
-            .replace(/\n/g, ' ') // Replace newlines with spaces
-            .replace(/,\s*([}\]])/g, '$1') // Remove trailing commas
-            .replace(/"\s*"/g, '""') // Fix empty strings
-            .replace(/([{,])\s*"([^"]+)"\s*:/g, '$1"$2":') // Normalize property name quotes
-            .trim();
-
-        // Ensure the text starts and ends with curly braces
-        if (!cleanedText.startsWith('{')) {
-            const startIndex = cleanedText.indexOf('{');
-            if (startIndex !== -1) {
-                cleanedText = cleanedText.substring(startIndex);
-            }
-        }
-        if (!cleanedText.endsWith('}')) {
-            const endIndex = cleanedText.lastIndexOf('}');
-            if (endIndex !== -1) {
-                cleanedText = cleanedText.substring(0, endIndex + 1);
-            }
-        }
+        // Strict JSON extraction
+        const jsonMatch = text.match(/\{[\s\S]*\}/);  // Match everything between first { and last }
+        const cleanedText = jsonMatch ? jsonMatch[0].trim() : '{}';
         
         let analysis;
         try {
             analysis = JSON.parse(cleanedText);
+            
+            // Enforce strict schema
+            if (typeof analysis.description !== 'string') analysis.description = `Analysis of ${functionName}`;
+            if (typeof analysis.type !== 'string') analysis.type = 'Unknown';
+            if (!Array.isArray(analysis.parameterDescriptions)) analysis.parameterDescriptions = [];
+            if (typeof analysis.returnDescription !== 'string') analysis.returnDescription = 'Unknown return value';
+            
+            return analysis;
         } catch (parseError) {
-            console.error('Error parsing Gemini response:', parseError, '\nResponse text:', cleanedText);
-            // Provide a fallback analysis object
+            console.error('Error parsing Gemini response:', parseError);
             return {
-                description: `Analysis of ${functionName} (parsing error: ${parseError.message})`,
+                description: `Analysis of ${functionName}`,
+                type: 'Unknown',
                 parameterDescriptions: [],
-                returnDescription: 'Analysis failed due to parsing error'
+                returnDescription: 'Analysis failed'
             };
         }
 
