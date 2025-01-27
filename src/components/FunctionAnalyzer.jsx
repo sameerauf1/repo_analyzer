@@ -1,6 +1,28 @@
-import { Paper, Typography, List, ListItem, ListItemText, Divider, Chip, Box, Alert } from '@mui/material';
+import { Paper, Typography, List, ListItem, ListItemText, Divider, Chip, Box, Alert, CircularProgress } from '@mui/material';
 
-const FunctionAnalyzer = ({ functions }) => {
+const FunctionAnalyzer = ({ functions, isLoading = false }) => {
+    if (isLoading) {
+        return (
+            <Paper elevation={3} sx={{ p: 3, borderRadius: 2, border: '1px solid rgba(184, 134, 11, 0.1)' }}>
+                <Typography variant="h6" gutterBottom sx={{ color: '#B8860B', letterSpacing: '0.02em' }}>
+                    Function Analysis
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
+                    <CircularProgress sx={{
+                        color: '#B8860B',
+                        mb: 2,
+                        '& .MuiCircularProgress-circle': {
+                            strokeLinecap: 'round',
+                        }
+                    }} />
+                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                        Analyzing functions...
+                    </Typography>
+                </Box>
+            </Paper>
+        );
+    }
+
     if (!functions || functions.length === 0) {
         return (
             <Paper elevation={3} sx={{ p: 3, borderRadius: 2, border: '1px solid rgba(184, 134, 11, 0.1)' }}>

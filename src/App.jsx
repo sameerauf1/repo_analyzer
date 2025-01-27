@@ -61,6 +61,7 @@ function App() {
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [functions, setFunctions] = useState([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentRepo, setCurrentRepo] = useState({ owner: '', repo: '' });
 
   const handleRepositorySubmit = async ({ owner, repo }) => {
@@ -139,6 +140,7 @@ function App() {
         const isJsFile = /\.(js|jsx|ts|tsx)$/.test(file.path);
         if (isJsFile) {
           console.log(`Analyzing functions in ${file.path}`);
+          setIsAnalyzing(true);
           try {
             // Parse code using Babel
             const ast = parser.parse(fileData.content, {
@@ -249,8 +251,10 @@ function App() {
             );
 
             setFunctions(analyzedWithAI);
+            setIsAnalyzing(false);
           } catch (analysisError) {
             console.error('Error during code analysis:', analysisError);
+            setIsAnalyzing(false);
             setFunctions([{
               name: 'Analysis Error',
               type: 'error',
@@ -322,7 +326,7 @@ function App() {
                 border: '1px solid rgba(184, 134, 11, 0.1)',
               }}
             >
-              <FunctionAnalyzer functions={functions} />
+              <FunctionAnalyzer functions={functions} isLoading={isAnalyzing} />
             </Paper>
           </Box>
         </Stack>
